@@ -5,6 +5,7 @@ const FILES = [
   './manifest.json',
   './images/Logo192.png',
   './images/Logo512.png',
+  './images/wgt-orn-demo.png',//added for offline;
   'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js',
   'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',
   'https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js',

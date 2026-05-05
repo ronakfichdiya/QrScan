@@ -1812,45 +1812,81 @@
     })();
 
     // ── CAMERA ──
+    let ctx = null;
+    let lastTickTime = 0;
+    const TICK_INTERVAL = 150; // decode every 150ms only
+
     async function startCamera() {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } }
+          video: {
+            facingMode: 'environment',
+            width: { ideal: 1920 },
+            height: { ideal: 1080 },
+            frameRate: { ideal: 30 }
+          }
         });
+
         const video = document.getElementById('video');
         video.srcObject = stream;
         await video.play();
+
+        // Apply continuous autofocus AFTER stream starts (Samsung fix)
+        const track = stream.getVideoTracks()[0];
+        try {
+          await track.applyConstraints({
+            advanced: [{ focusMode: 'continuous' }]
+          });
+        } catch (e) { }
+
+        // Cache canvas context once
+        const canvas = document.getElementById('canvas');
+        ctx = canvas.getContext('2d');
+
         document.getElementById('camPlaceholder').style.display = 'none';
         document.getElementById('cameraWrap').style.display = 'block';
         scanning = true;
         requestAnimationFrame(tick);
+
       } catch (e) {
         showToast('Camera access denied. Allow in browser settings.');
       }
     }
 
-    function tick() {
+    function tick(timestamp) {
       if (!scanning) return;
+
+      requestAnimationFrame(tick);
+
+      // Throttle: only decode every 150ms
+      if (timestamp - lastTickTime < TICK_INTERVAL) return;
+      lastTickTime = timestamp;
+
       const video = document.getElementById('video');
+      if (video.readyState !== video.HAVE_ENOUGH_DATA) return;
+
       const canvas = document.getElementById('canvas');
-      if (video.readyState === video.HAVE_ENOUGH_DATA) {
-        const scale = 0.5;
-        canvas.width = video.videoWidth * scale;
-        canvas.height = video.videoHeight * scale;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        const code = jsQR(img.data, img.width, img.height, { inversionAttempts: 'dontInvert' });
-        if (code) {
-          const now = Date.now();
-          if (code.data !== lastCode || now - lastCodeTime > 1000) {
-            lastCode = code.data;
-            lastCodeTime = now;
-            processQR(code.data);
-          }
+
+      // Use 0.75 scale — balance speed vs accuracy
+      const scale = 0.75;
+      canvas.width = video.videoWidth * scale;
+      canvas.height = video.videoHeight * scale;
+
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+      const code = jsQR(img.data, img.width, img.height, {
+        inversionAttempts: 'attemptBoth'  // catches dark+light QR both
+      });
+
+      if (code) {
+        const now = Date.now();
+        if (code.data !== lastCode || now - lastCodeTime > 1000) {
+          lastCode = code.data;
+          lastCodeTime = now;
+          processQR(code.data);
         }
       }
-      requestAnimationFrame(tick);
     }
 
     // ── QR PARSING ──
